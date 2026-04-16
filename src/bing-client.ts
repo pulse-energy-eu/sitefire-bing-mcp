@@ -99,11 +99,12 @@ export interface BingClientConfig {
 
 export interface BingClient {
   /**
-   * POST a request to the Bing Webmaster API and return the unwrapped, scrubbed, date-parsed payload.
+   * Call the Bing Webmaster API and return the unwrapped, scrubbed, date-parsed payload.
+   * Defaults to GET (most endpoints). Use httpMethod: "POST" for write endpoints like SubmitUrlBatch.
    *
    * @throws BingApiError on any non-success response.
    */
-  call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
+  call<T = unknown>(method: string, params?: Record<string, unknown>, httpMethod?: "GET" | "POST"): Promise<T>;
 }
 
 const DEFAULT_RETRY_DELAY_MS = 250;
@@ -122,9 +123,21 @@ export function createBingClient(config: BingClientConfig): BingClient {
   const retryDelayMs = config.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   const baseUrl = config.baseUrl ?? BING_API_BASE;
 
-  async function doRequest(method: string, params: Record<string, unknown>): Promise<Response> {
-    const url = `${baseUrl}${method}?apikey=${encodeURIComponent(config.apiKey)}`;
-    return fetchImpl(url, {
+  async function doRequest(method: string, params: Record<string, unknown>, httpMethod: "GET" | "POST"): Promise<Response> {
+    const url = new URL(`${baseUrl}${method}`);
+    url.searchParams.set("apikey", config.apiKey);
+
+    if (httpMethod === "GET") {
+      for (const [key, value] of Object.entries(params)) {
+        url.searchParams.set(key, String(value));
+      }
+      return fetchImpl(url.toString(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+    }
+
+    return fetchImpl(url.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json; charset=utf-8",
@@ -134,10 +147,10 @@ export function createBingClient(config: BingClientConfig): BingClient {
     });
   }
 
-  async function call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  async function call<T = unknown>(method: string, params: Record<string, unknown> = {}, httpMethod: "GET" | "POST" = "GET"): Promise<T> {
     let response: Response;
     try {
-      response = await doRequest(method, params);
+      response = await doRequest(method, params, httpMethod);
     } catch (err) {
       throw new BingApiError({
         kind: "HttpFail",
@@ -149,7 +162,7 @@ export function createBingClient(config: BingClientConfig): BingClient {
     if (response.status === 503) {
       await sleepImpl(retryDelayMs);
       try {
-        response = await doRequest(method, params);
+        response = await doRequest(method, params, httpMethod);
       } catch (err) {
         throw new BingApiError({
           kind: "HttpFail",

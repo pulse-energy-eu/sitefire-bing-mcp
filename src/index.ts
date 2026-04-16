@@ -94,6 +94,7 @@ server.tool(
   "list_my_sites",
   "Lists all sites in the user's Bing Webmaster account with verification status. Use when the user asks 'what sites do I have?' or 'which sites are verified?' Present results as a compact table (site URL, verified yes/no). Keep your response under 80 words.",
   {},
+  { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   async () => {
     const key = getApiKey();
     if (!key) {
@@ -121,6 +122,7 @@ server.tool(
   "setup_check",
   "Diagnoses configuration health: API key validity, site verification, sitemap submission, and data availability. Use when the user is setting up for the first time or something is broken. Show a checklist of pass/fail items and list any required next actions. Do not explain what each check means unless asked.",
   { site_url: z.string().optional().describe("Optional: check a specific site URL") },
+  { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   async ({ site_url }) => {
     const key = getApiKey();
     if (!key) {
@@ -157,6 +159,7 @@ server.tool(
   "weekly_report",
   "Weekly Bing performance snapshot: top queries, top pages, crawl health, crawl issues, and sitemap status. Use when the user asks 'how is my site doing?' or wants a performance overview. Lead with the key numbers (clicks, impressions, crawl errors) in a compact table, then list top queries and pages as short bullet lists. Keep it under 150 words unless the user asks for detail.",
   { site_url: z.string().describe("Your verified site URL (e.g. https://example.com/)") },
+  { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   async ({ site_url }) => {
     try {
       const key = requireApiKey();
@@ -176,6 +179,7 @@ server.tool(
     url: z.string().describe("The URL to inspect"),
     site_url: z.string().describe("The verified site this URL belongs to"),
   },
+  { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   async ({ url, site_url }) => {
     try {
       const key = requireApiKey();
@@ -196,6 +200,7 @@ server.tool(
     country: z.string().optional().describe("Country code (default: us)"),
     language: z.string().optional().describe("Language code (default: en-US)"),
   },
+  { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   async ({ keyword, country, language }) => {
     try {
       const key = requireApiKey();
@@ -215,6 +220,7 @@ server.tool(
     url: z.string().describe("The URL you just published"),
     site_url: z.string().describe("The verified site this URL belongs to"),
   },
+  { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
   async ({ url, site_url }) => {
     try {
       const key = requireApiKey();
@@ -231,6 +237,7 @@ server.tool(
   "what_are_people_asking",
   "Extracts question-style search queries that bring traffic to your site from Bing (e.g. 'how to...', 'what is...', 'why does...'). Use when the user wants content ideas or asks 'what are people searching for?' Present results as a numbered list of questions sorted by impressions. Keep your response under 150 words.",
   { site_url: z.string().describe("Your verified site URL") },
+  { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   async ({ site_url }) => {
     try {
       const key = requireApiKey();

@@ -1,0 +1,37 @@
+{
+  "name": "sitefire-bing-mcp",
+  "version": "0.1.0",
+  "description": "Local MCP server wrapping the Bing Webmaster API for Claude Desktop. Seven composite, outcome-named tools for non-technical SEO/GEO users.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "sitefire-bing-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "record-fixtures": "tsx scripts/record-fixtures.ts",
+    "inspector": "npx @modelcontextprotocol/inspector tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  }
+}

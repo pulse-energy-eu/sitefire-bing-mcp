@@ -1,0 +1,26 @@
+{
+  "d": [
+    {
+      "__type": "Site:#Microsoft.Bing.Webmaster.Api",
+      "Url": "https://sitefire.ai/",
+      "DnsVerificationCode": "REDACTED_DNS_CODE",
+      "AuthenticationCode": "REDACTED_AUTH_CODE",
+      "IsVerified": true,
+      "VerifiedDate": "/Date(1700000000000)/",
+      "IsDnsVerified": false,
+      "IsMetaTagVerified": false,
+      "IsXmlFileVerified": true
+    },
+    {
+      "__type": "Site:#Microsoft.Bing.Webmaster.Api",
+      "Url": "https://www.sitefire.ai/",
+      "DnsVerificationCode": "REDACTED_DNS_CODE",
+      "AuthenticationCode": "REDACTED_AUTH_CODE",
+      "IsVerified": true,
+      "VerifiedDate": "/Date(1705000000000+0000)/",
+      "IsDnsVerified": true,
+      "IsMetaTagVerified": false,
+      "IsXmlFileVerified": false
+    }
+  ]
+}

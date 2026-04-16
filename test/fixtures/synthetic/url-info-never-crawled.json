@@ -1,0 +1,12 @@
+{
+  "d": {
+    "__type": "UrlInfo:#Microsoft.Bing.Webmaster.Api",
+    "Url": "https://example.com/never-crawled",
+    "IsPage": false,
+    "DiscoveryDate": null,
+    "LastCrawledDate": null,
+    "AnchorCount": 0,
+    "DocumentSize": 0,
+    "HttpStatus": 0
+  }
+}

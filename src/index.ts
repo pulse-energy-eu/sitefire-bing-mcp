@@ -4,6 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { bingFetch, BingApiError } from "./bing-client.js";
+import { translateError } from "./bing-errors.js";
 import { listMySites } from "./tools/list-my-sites.js";
 import { setupCheck } from "./tools/setup-check.js";
 import { weeklyReport } from "./tools/weekly-report.js";
@@ -30,6 +31,19 @@ function requireApiKey(): string {
     );
   }
   return key;
+}
+
+type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
+
+function errorResult(error: unknown): ToolResult {
+  const { message, suggested_tool } = translateError(error);
+  const text = suggested_tool
+    ? `${message} Try running ${suggested_tool}.`
+    : message;
+  return {
+    content: [{ type: "text" as const, text }],
+    isError: true,
+  };
 }
 
 async function startupCheck(): Promise<void> {
@@ -144,9 +158,13 @@ server.tool(
   "Weekly Bing performance snapshot: top queries, top pages, crawl health, crawl issues, and sitemap status. Use when the user asks 'how is my site doing?' or wants a performance overview. Lead with the key numbers (clicks, impressions, crawl errors) in a compact table, then list top queries and pages as short bullet lists. Keep it under 150 words unless the user asks for detail.",
   { site_url: z.string().describe("Your verified site URL (e.g. https://example.com/)") },
   async ({ site_url }) => {
-    const key = requireApiKey();
-    const result = await weeklyReport(key, site_url);
-    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    try {
+      const key = requireApiKey();
+      const result = await weeklyReport(key, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
   },
 );
 
@@ -159,9 +177,13 @@ server.tool(
     site_url: z.string().describe("The verified site this URL belongs to"),
   },
   async ({ url, site_url }) => {
-    const key = requireApiKey();
-    const result = await inspectUrl(key, url, site_url);
-    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    try {
+      const key = requireApiKey();
+      const result = await inspectUrl(key, url, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
   },
 );
 
@@ -175,9 +197,13 @@ server.tool(
     language: z.string().optional().describe("Language code (default: en-US)"),
   },
   async ({ keyword, country, language }) => {
-    const key = requireApiKey();
-    const result = await keywordOpportunity(key, keyword, country, language);
-    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    try {
+      const key = requireApiKey();
+      const result = await keywordOpportunity(key, keyword, country, language);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
   },
 );
 
@@ -190,9 +216,13 @@ server.tool(
     site_url: z.string().describe("The verified site this URL belongs to"),
   },
   async ({ url, site_url }) => {
-    const key = requireApiKey();
-    const result = await pushToBing(key, url, site_url);
-    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    try {
+      const key = requireApiKey();
+      const result = await pushToBing(key, url, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
   },
 );
 
@@ -202,9 +232,13 @@ server.tool(
   "Extracts question-style search queries that bring traffic to your site from Bing (e.g. 'how to...', 'what is...', 'why does...'). Use when the user wants content ideas or asks 'what are people searching for?' Present results as a numbered list of questions sorted by impressions. Keep your response under 150 words.",
   { site_url: z.string().describe("Your verified site URL") },
   async ({ site_url }) => {
-    const key = requireApiKey();
-    const result = await whatArePeopleAsking(key, site_url);
-    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    try {
+      const key = requireApiKey();
+      const result = await whatArePeopleAsking(key, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
   },
 );
 

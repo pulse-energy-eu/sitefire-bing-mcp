@@ -637,6 +637,7 @@ After v0 validates with 2-3 friendly customers:
   - If Yes: "Generate API key at Settings → API Access" with screenshots
   - Paste key → validate via test call → show verified sites → copy Claude Desktop config
 - Short launch post on sitefire blog positioning the tool in the GEO narrative
+- Add MCP tool annotations (readOnlyHint, idempotentHint, outputSchema) for typed, self-describing responses
 - Instrument `setup_check` optional anonymous success/fail ping to a sitefire endpoint (with explicit opt-in note, respects lead-magnet trust story)
 
 ## Open questions / known risks
@@ -650,6 +651,12 @@ After v0 validates with 2-3 friendly customers:
 | Silent Bing API regression | Medium, low likelihood | Manual discipline in v0; TODO for cron smoke check in post-v0. |
 | Claude Desktop MCP format changes | Low, low likelihood | Structured-response approach is MCP-spec-idiomatic, unlikely to break. |
 | IndexNow key design | High (resolved) | Codex review caught that v0 was reusing the Bing API key as the IndexNow key. Fixed: IndexNow now uses a separate INDEXNOW_KEY env var. |
+| Double-translation loses typed errors | High (resolved) | Tool functions now let BingApiError propagate; errorResult() in index.ts translates once. |
+| No per-request timeout on bingFetch | Medium | Accepted for v0 local use. TODO: add AbortSignal with 15s timeout for Phase 1. |
+| Startup network call blocks transport | High (resolved) | Transport now connects first; startupCheck() runs in background. |
+| URL exact-match in setup_check | Medium (resolved) | URLs normalized via new URL().href before comparison. |
+| No outputSchema or tool annotations | Low | Phase 1 item. Add readOnlyHint, idempotentHint, and outputSchema for typed responses. |
+| Node.js prerequisite not documented | Medium (resolved) | Added to README prerequisites. |
 
 ## References
 

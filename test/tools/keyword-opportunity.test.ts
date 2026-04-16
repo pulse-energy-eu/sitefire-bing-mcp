@@ -47,14 +47,14 @@ describe("keywordOpportunity", () => {
     expect(result.latest_week_impressions).toBe(0);
   });
 
-  it("invalid key: throws with user message", async () => {
+  it("invalid key: throws BingApiError", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(fixture("synthetic/invalid-api-key.json")),
     );
 
     await expect(
       keywordOpportunity("bad-key", "test"),
-    ).rejects.toThrow("API key");
+    ).rejects.toThrow("InvalidApiKey");
   });
 
   it("cross-site capability: does NOT require site_url", async () => {

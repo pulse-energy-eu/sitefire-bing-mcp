@@ -64,13 +64,13 @@ describe("whatArePeopleAsking", () => {
     expect(result.note).toContain("GetQueryStats");
   });
 
-  it("invalid site: throws with translateError message", async () => {
+  it("invalid site: throws BingApiError", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(fixture("synthetic/not-authorized.json")),
     );
 
     await expect(
       whatArePeopleAsking("key", "https://other.com/"),
-    ).rejects.toThrow("not verified");
+    ).rejects.toThrow("NotAuthorized");
   });
 });

@@ -1,6 +1,15 @@
 import { bingFetch, BingApiError } from "../bing-client.js";
 import { translateError } from "../bing-errors.js";
 
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.href;
+  } catch {
+    return url;
+  }
+}
+
 type CheckStatus = "pass" | "fail" | "pending_48h" | "n/a";
 
 interface SetupReport {
@@ -55,7 +64,7 @@ export async function setupCheck(
 
   const verifiedSites = rawSites
     .filter((s) => s.IsVerified)
-    .map((s) => String(s.Url));
+    .map((s) => normalizeUrl(String(s.Url)));
 
   report.sites = verifiedSites;
   report.sites_count = verifiedSites.length;
@@ -71,8 +80,9 @@ export async function setupCheck(
 
   // Determine target site
   if (siteUrl) {
-    if (verifiedSites.includes(siteUrl)) {
-      report.target_site = siteUrl;
+    const normalizedSiteUrl = normalizeUrl(siteUrl);
+    if (verifiedSites.includes(normalizedSiteUrl)) {
+      report.target_site = normalizedSiteUrl;
     } else {
       report.checks.site_verified = "fail";
       report.next_actions.push(

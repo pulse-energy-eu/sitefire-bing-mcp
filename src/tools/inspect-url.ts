@@ -1,5 +1,4 @@
 import { bingFetch } from "../bing-client.js";
-import { translateError } from "../bing-errors.js";
 
 interface UrlInspection {
   url: string;
@@ -22,17 +21,11 @@ export async function inspectUrl(
   url: string,
   siteUrl: string,
 ): Promise<UrlInspection> {
-  let raw: Record<string, unknown>;
-  try {
-    raw = (await bingFetch({
-      apiKey,
-      method: "GetUrlInfo",
-      params: { siteUrl, url },
-    })) as Record<string, unknown>;
-  } catch (err) {
-    const userErr = translateError(err, { url, siteUrl });
-    throw new Error(userErr.message);
-  }
+  const raw = (await bingFetch({
+    apiKey,
+    method: "GetUrlInfo",
+    params: { siteUrl, url },
+  })) as Record<string, unknown>;
 
   const isPage = Boolean(raw.IsPage);
   const discoveredAt = (raw.DiscoveryDate ?? raw.DateDiscovered ?? null) as string | null;

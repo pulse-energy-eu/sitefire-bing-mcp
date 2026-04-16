@@ -92,13 +92,13 @@ describe("inspectUrl", () => {
     expect(result.interpretation.recommended_action).toContain("push_to_bing");
   });
 
-  it("URL not under site: throws with translateError message", async () => {
+  it("URL not under site: throws BingApiError", async () => {
     mockFetch.mockResolvedValueOnce(
       mockResponse(fixture("synthetic/not-authorized.json")),
     );
 
     await expect(
       inspectUrl("key", "https://other.com/page", "https://other.com/"),
-    ).rejects.toThrow("not verified");
+    ).rejects.toThrow("NotAuthorized");
   });
 });

@@ -1,5 +1,4 @@
 import { bingFetch } from "../bing-client.js";
-import { translateError } from "../bing-errors.js";
 
 const QUESTION_WORDS = new Set([
   "how",
@@ -46,17 +45,11 @@ export async function whatArePeopleAsking(
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  let raw: Array<Record<string, unknown>>;
-  try {
-    raw = (await bingFetch({
-      apiKey,
-      method: "GetQueryStats",
-      params: { siteUrl },
-    })) as Array<Record<string, unknown>>;
-  } catch (err) {
-    const userErr = translateError(err, { siteUrl });
-    throw new Error(userErr.message);
-  }
+  const raw = (await bingFetch({
+    apiKey,
+    method: "GetQueryStats",
+    params: { siteUrl },
+  })) as Array<Record<string, unknown>>;
 
   const allQueries: QueryRow[] = raw.map((r) => ({
     query: String(r.Query ?? ""),

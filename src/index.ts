@@ -243,9 +243,9 @@ server.tool(
 );
 
 async function main(): Promise<void> {
-  await startupCheck();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  startupCheck();
 }
 
 main().catch((err) => {

@@ -1,5 +1,4 @@
 import { bingFetch } from "../bing-client.js";
-import { translateError } from "../bing-errors.js";
 
 interface WeekData {
   week_start: string;
@@ -23,21 +22,15 @@ export async function keywordOpportunity(
   country = "us",
   language = "en-US",
 ): Promise<KeywordOpportunity> {
-  let raw: Array<Record<string, unknown>>;
-  try {
-    raw = (await bingFetch({
-      apiKey,
-      method: "GetKeywordStats",
-      params: {
-        q: keyword,
-        country,
-        language,
-      },
-    })) as Array<Record<string, unknown>>;
-  } catch (err) {
-    const userErr = translateError(err);
-    throw new Error(userErr.message);
-  }
+  const raw = (await bingFetch({
+    apiKey,
+    method: "GetKeywordStats",
+    params: {
+      q: keyword,
+      country,
+      language,
+    },
+  })) as Array<Record<string, unknown>>;
 
   const weeklyTrend: WeekData[] = raw
     .map((row) => ({

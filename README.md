@@ -4,6 +4,7 @@ Get Bing search and AI visibility insights for your website, directly inside Cla
 
 ## What you need
 
+- **Node.js 18 or newer** installed on your computer ([download here](https://nodejs.org))
 - **Claude Desktop** installed on your computer ([download here](https://claude.ai/download))
 - **A Bing Webmaster Tools account** (free - you can sign in with your existing Google, Microsoft, or Facebook account)
 - **Your Bing API key** (generated inside Bing Webmaster Tools - see steps below)

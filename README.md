@@ -2,6 +2,20 @@
 
 Get Bing search and AI visibility insights for your website, directly inside Claude Desktop.
 
+## The seven tools
+
+| Tool | Answers |
+|---|---|
+| `list_my_sites` | Which sites are under my Bing account? |
+| `setup_check` | Is everything configured correctly? Where do I start? |
+| `weekly_report` | How is my site doing on Bing this week? |
+| `inspect_url` | What does Bing know about this specific URL? |
+| `keyword_opportunity` | Is this keyword worth writing about for Bing/Copilot users? |
+| `push_to_bing` | I just published this URL — tell Bing. |
+| `what_are_people_asking` | What questions bring people to my site from Bing? |
+
+See [DESIGN.md § The seven tools](DESIGN.md#the-seven-tools) for the full contract of each one.
+
 ## What you need
 
 - **Node.js 18 or newer** installed on your computer ([download here](https://nodejs.org))

@@ -105,15 +105,16 @@ export async function weeklyReport(
   }
 
   // Extract pages
+  let allPages: PageRow[] = [];
   let topPages: PageRow[] = [];
   if (pagesResult.status === "fulfilled") {
     const raw = pagesResult.value as Array<Record<string, unknown>>;
-    topPages = raw
-      .map((r) => ({
-        page: String(r.Query ?? r.Page ?? ""),
-        impressions: Number(r.Impressions ?? 0),
-        clicks: Number(r.Clicks ?? 0),
-      }))
+    allPages = raw.map((r) => ({
+      page: String(r.Query ?? r.Page ?? ""),
+      impressions: Number(r.Impressions ?? 0),
+      clicks: Number(r.Clicks ?? 0),
+    }));
+    topPages = [...allPages]
       .sort((a, b) => b.impressions - a.impressions)
       .slice(0, 10);
   } else {
@@ -179,7 +180,7 @@ export async function weeklyReport(
 
   const isNewProperty =
     allQueries.length === 0 &&
-    topPages.length === 0 &&
+    allPages.length === 0 &&
     totalImpressions === 0;
 
   const rollup = isNewProperty
@@ -188,7 +189,7 @@ export async function weeklyReport(
         clicks: totalClicks,
         impressions: totalImpressions,
         queries_count: allQueries.length,
-        pages_count: topPages.length,
+        pages_count: allPages.length,
       };
 
   const emptyStateGuidance = isNewProperty

@@ -78,7 +78,7 @@ const server = new McpServer({
 // Tool 1: list_my_sites
 server.tool(
   "list_my_sites",
-  "Which sites are verified under your Bing Webmaster account? Returns all your sites with verification status. Good starting point to see what you have.",
+  "Lists all sites in the user's Bing Webmaster account with verification status. Use when the user asks 'what sites do I have?' or 'which sites are verified?' Present results as a compact table (site URL, verified yes/no). Keep your response under 80 words.",
   {},
   async () => {
     const key = getApiKey();
@@ -105,7 +105,7 @@ server.tool(
 // Tool 2: setup_check
 server.tool(
   "setup_check",
-  "Is everything configured correctly? Checks your API key, verified sites, sitemaps, and data availability. Run this first if you are new or something is not working.",
+  "Diagnoses configuration health: API key validity, site verification, sitemap submission, and data availability. Use when the user is setting up for the first time or something is broken. Show a checklist of pass/fail items and list any required next actions. Do not explain what each check means unless asked.",
   { site_url: z.string().optional().describe("Optional: check a specific site URL") },
   async ({ site_url }) => {
     const key = getApiKey();
@@ -141,7 +141,7 @@ server.tool(
 // Tool 3: weekly_report
 server.tool(
   "weekly_report",
-  "How is your site doing on Bing this week? Shows top queries, top pages, crawl health, crawl issues, and sitemap status. The main dashboard view.",
+  "Weekly Bing performance snapshot: top queries, top pages, crawl health, crawl issues, and sitemap status. Use when the user asks 'how is my site doing?' or wants a performance overview. Lead with the key numbers (clicks, impressions, crawl errors) in a compact table, then list top queries and pages as short bullet lists. Keep it under 150 words unless the user asks for detail.",
   { site_url: z.string().describe("Your verified site URL (e.g. https://example.com/)") },
   async ({ site_url }) => {
     const key = requireApiKey();
@@ -153,7 +153,7 @@ server.tool(
 // Tool 4: inspect_url
 server.tool(
   "inspect_url",
-  "What does Bing know about a specific URL? Shows when it was discovered, last crawled, whether it is indexed, and what to do if it is stale or missing.",
+  "Checks indexing status for a single URL: discovery date, last crawl, index status, and HTTP code. Use when the user asks 'is this page indexed?' or 'why is my page not showing up?' Show the status fields as a short key-value list. Only suggest next actions if the URL has a problem.",
   {
     url: z.string().describe("The URL to inspect"),
     site_url: z.string().describe("The verified site this URL belongs to"),
@@ -168,7 +168,7 @@ server.tool(
 // Tool 5: keyword_opportunity
 server.tool(
   "keyword_opportunity",
-  "Is a keyword worth writing about for Bing and Copilot users? Shows 12-week impression trend and whether there is demand. Works without owning a site - great for research before creating content.",
+  "Evaluates search demand for a keyword on Bing: 12-week impression trend and volume signal. Does not require owning a site. Use when the user asks 'is this keyword worth targeting?' or 'how much demand is there for X?' Show the verdict (worth it or not) first, then the trend as a compact sparkline or short table. Keep your response under 100 words.",
   {
     keyword: z.string().describe("The keyword to research"),
     country: z.string().optional().describe("Country code (default: us)"),
@@ -184,7 +184,7 @@ server.tool(
 // Tool 6: push_to_bing
 server.tool(
   "push_to_bing",
-  "Just published a URL? Tell Bing about it. Submits the URL via the Bing Webmaster API and optionally via IndexNow for faster discovery across all search engines.",
+  "Submits a URL to Bing for crawling (and optionally via IndexNow for all search engines). Use when the user says 'I just published a page' or 'submit this URL to Bing.' Confirm success or failure in one sentence. Do not explain the submission process.",
   {
     url: z.string().describe("The URL you just published"),
     site_url: z.string().describe("The verified site this URL belongs to"),
@@ -199,7 +199,7 @@ server.tool(
 // Tool 7: what_are_people_asking
 server.tool(
   "what_are_people_asking",
-  "What questions bring people to your site from Bing? Filters your search queries to find natural-language questions (5+ words or starting with how, what, why, etc.). Great for content ideas.",
+  "Extracts question-style search queries that bring traffic to your site from Bing (e.g. 'how to...', 'what is...', 'why does...'). Use when the user wants content ideas or asks 'what are people searching for?' Present results as a numbered list of questions sorted by impressions. Keep your response under 150 words.",
   { site_url: z.string().describe("Your verified site URL") },
   async ({ site_url }) => {
     const key = requireApiKey();

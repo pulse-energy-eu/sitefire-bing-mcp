@@ -71,6 +71,11 @@ export async function pushToBing(
     }
   }
 
+  // Skip IndexNow if Bing submission failed (no point notifying other engines)
+  if (result.bing_submit.status !== "ok") {
+    return result;
+  }
+
   // IndexNow submission - uses a separate key, NOT the Bing API key
   const indexNowKey = process.env.INDEXNOW_KEY ?? "";
   if (!indexNowKey) {

@@ -46,7 +46,7 @@ export async function keywordOpportunity(
       broad_impressions: Number(row.BroadImpressions ?? 0),
     }))
     .sort((a, b) => a.week_start.localeCompare(b.week_start))
-    .slice(0, 12);
+    .slice(-12);
 
   const latestWeek = weeklyTrend[weeklyTrend.length - 1];
   const latestImpressions = latestWeek
@@ -85,8 +85,11 @@ function computeTrendDirection(
     secondHalf.reduce((sum, w) => sum + w.broad_impressions, 0) /
     secondHalf.length;
 
-  const change = avgFirst === 0 ? 0 : (avgSecond - avgFirst) / avgFirst;
+  // Zero-to-nonzero is "up", nonzero-to-zero is "down"
+  if (avgFirst === 0 && avgSecond > 0) return "up";
+  if (avgFirst === 0) return "flat";
 
+  const change = (avgSecond - avgFirst) / avgFirst;
   if (change > 0.1) return "up";
   if (change < -0.1) return "down";
   return "flat";

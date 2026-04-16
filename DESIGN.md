@@ -579,10 +579,144 @@ Original breakdown (kept for reference):
 | Phase | Channel | Sitefire-side cost |
 |---|---|---|
 | v0 (internal + friendlies) | `npx github:pulse-energy-eu/sitefire-bing-mcp` | $0. GitHub public repos are free. |
-| Phase 1 (lead magnet) | `npx @sitefire/sitefire-bing-mcp` (npm) + setup wizard page at sitefire.ai/bing-seo | $0 incremental. npm registry free for public packages. Wizard is a route on existing sitefire.ai hosting. |
-| Phase 2 (remote MCP — deferred) | Hosted HTTP MCP at `mcp.sitefire.ai/bing` | $5-20/month on Fly.io or similar. Only if distribution demands it. |
+| v0 local (dev install) | Claude Desktop config pointing to local `dist/index.js` | $0. Runs on user's laptop. |
+| Phase 1 (remote connector) | Claude Desktop Connector at `app.sitefire.ai/api/mcp` | $0 incremental. Uses existing Vercel deployment. |
+| Phase 1 npm (optional) | `npx @sitefire/bing-mcp` for developers who prefer local | $0. npm registry free for public packages. |
 
-The MCP runs on the user's laptop. Sitefire is never in the request path. Zero infrastructure cost for v0 and Phase 1.
+v0 runs locally. Phase 1 adds Bing tools to the existing sitefire remote MCP at `app.sitefire.ai/api/mcp`, reusing existing Vercel serverless infra. No new hosting required.
+
+## Phase 1: Remote MCP connector (lead-magnet funnel)
+
+### Architecture decision (Codex-reviewed, April 2026)
+
+**Single endpoint, one connector, dynamic tool list based on entitlement.**
+
+The original Phase 2 plan proposed a separate anonymous endpoint at `/api/mcp/bing`. Codex review identified that this creates more complexity than it solves:
+- "No auth" is not zero friction when the user still has to generate a Bing API key
+- Free Claude users are limited to 1 custom connector, so a two-connector funnel is clunky
+- Anonymous session management in stateless Vercel is building a custom auth layer anyway
+- Putting secrets in tool arguments (a `setup_bing` tool) risks leakage via logs
+- Remote connector traffic comes from Anthropic's cloud, not the user's machine, so client-based session identity doesn't work
+
+**Revised plan: one connector, lightweight auth, entitlement-based tools.**
+
+### User journey
+
+```
+LEAD-MAGNET FUNNEL
+════════════════════════════════════════════════════════════
+
+Step 1: DISCOVERY
+  User reads blog post or recommendation: "Free Bing SEO tools for Claude"
+  Goes to Settings > Connectors > "+"
+  Pastes: https://app.sitefire.ai/api/mcp
+  OAuth flow redirects to sitefire.ai/bing-seo
+
+Step 2: LIGHTWEIGHT AUTH (sitefire.ai/bing-seo)
+  One page, one field:
+  - "Paste your Bing Webmaster API key"
+  - Optional: "Enter your email for updates" (lead capture)
+  - Click "Connect"
+  Server validates key via GetUserSites, stores it encrypted,
+  mints a token, redirects back to Claude. Done.
+
+Step 3: VALUE (immediate)
+  "How is my site doing on Bing?" -> weekly_report with real data
+  "Is 'seo tools' worth targeting?" -> keyword_opportunity
+  All 7 Bing tools work. No sitefire account needed.
+
+Step 4: NUDGE (contextual, not on every response)
+  weekly_report includes: "This covers Bing search. Sitefire also
+  tracks how ChatGPT, Gemini, and Perplexity cite your site."
+  Only shown when relevant (e.g., after weekly_report, not after
+  simple list_my_sites calls).
+
+Step 5: CONVERSION
+  User runs the sitefire onboarding (same connector, same URL).
+  Their entitlement upgrades from "bing-only" to "full".
+  tools/list now returns sitefire tools + Bing tools.
+  No second connector needed.
+
+════════════════════════════════════════════════════════════
+```
+
+### Technical implementation
+
+**Where:** `pulse-geo/routes/api/mcp.ts` (existing Vercel serverless function)
+
+**Auth flow (two tiers, same endpoint):**
+
+```
+                          ┌─────────────────────┐
+                          │ app.sitefire.ai/     │
+                          │ api/mcp              │
+                          └──────────┬───────────┘
+                                     │
+                          ┌──────────▼───────────┐
+                          │ Bearer token present? │
+                          └──────────┬───────────┘
+                                     │
+                    ┌────────────────┤────────────────┐
+                    │ No             │ Yes            │
+                    ▼                ▼                │
+               401 + PRM       Validate token        │
+               (triggers       ┌─────┴─────┐         │
+                OAuth)         │            │         │
+                               ▼            ▼         │
+                          bing-only    full sitefire   │
+                          token        token           │
+                               │            │         │
+                               ▼            ▼         │
+                          7 Bing       All sitefire    │
+                          tools        + 7 Bing tools  │
+                               │            │         │
+                               └────────────┘         │
+                                     │                │
+                          ┌──────────▼───────────┐    │
+                          │ Return tools/list     │    │
+                          │ based on entitlement  │    │
+                          └──────────────────────┘    │
+```
+
+**What changes in pulse-geo:**
+
+1. **Auth page route** (`app.sitefire.ai/bing-seo`): Single-page form. User pastes Bing key. Server validates via `GetUserSites`, stores key encrypted in `bing_credentials` table, issues a lightweight Supabase token (anonymous auth or service-role-minted JWT). Redirects back to Claude's OAuth callback.
+
+2. **MCP endpoint** (`routes/api/mcp.ts`): `createMcpServer()` accepts an entitlement parameter. If the token is bing-only, register only Bing tools. If full sitefire, register all tools + Bing tools. The `checkAuth()` function determines entitlement from the token claims.
+
+3. **Bing tool registration**: Port the 7 tool functions from `sitefire-bing-mcp/src/tools/` into `pulse-geo/routes/api/_shared/bing-tools.ts`. Port `bing-client.ts` and `bing-errors.ts` alongside. Each tool reads the Bing API key from the `bing_credentials` table for the authenticated user.
+
+4. **Supabase migration**: New `bing_credentials` table with columns: `id`, `user_id` (nullable for bing-only users), `api_key_encrypted`, `sites_count`, `created_at`, `last_used_at`. RLS policy scopes to the token's user.
+
+5. **Upgrade path**: When a bing-only user creates a full sitefire account, their `bing_credentials` row gets linked to the new `user_id`. Their existing connector session continues working, tools/list expands to include sitefire tools on the next request.
+
+**What stays in sitefire-bing-mcp repo:**
+- The local stdio version (for developers who prefer `npx`)
+- All tests and fixtures (source of truth for Bing API behavior)
+- README for self-hosting
+- DESIGN.md (this document)
+
+### Key design decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| One endpoint vs two | One (`/api/mcp`) | Free users limited to 1 custom connector. Two connectors = clunky upgrade. |
+| Auth for free tier | Lightweight OAuth (key-paste page) | The user already has to generate a Bing key. Adding a 30-second auth page is not meaningful friction. |
+| Credential handling | Server-side encrypted storage | Never in tool arguments, never in logs, persists across sessions. |
+| Tool visibility | Dynamic based on entitlement | MCP spec supports different tools/list responses per auth state. |
+| Upgrade mechanism | Entitlement change, not new connector | User's existing connector gains more tools. No reinstall. |
+| Nudge placement | Contextual (weekly_report, setup_check) | Not on every response. Only at intent-rich moments. |
+| push_to_bing for free tier | Yes (with rate limit) | Submitting URLs is the action that makes users feel the tool works. |
+
+### Risks specific to Phase 1
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| Bing API key stored server-side | High | Encrypted at rest in Supabase. Key only decrypted per-request. No logging. |
+| Anonymous token abuse | Medium | Rate limiting per token. Token expiry after 30 days of inactivity. |
+| Vercel cold start on first tool call | Low | Existing sitefire MCP already handles this. ~1-2s observed. |
+| OAuth page adds friction vs "just paste URL" | Medium | The real friction is the Bing key, not the auth page. One field, one click. |
+| Free-tier user hits Bing API quota | Low | Bing quotas are per-key, not per-sitefire-user. User's own key, user's own limits. |
 
 ## Watch list: upcoming Microsoft features (Q2 2026+)
 
@@ -626,19 +760,30 @@ Verified the current state of the Bing Webmaster Tools onboarding by running the
 
 These are the remaining de-risks for the written setup guide, not blockers for v0 code.
 
-## Phase 1 hints (post-validation)
+## Phase 1 implementation checklist
 
-After v0 validates with 2-3 friendly customers:
+After v0 validates with friendly customers:
 
-- Publish to npm as `@sitefire/sitefire-bing-mcp` with proper versioning
-- Setup wizard: `sitefire.ai/bing-seo`, 4 screens:
-  - Do you have Bing Webmaster Tools? (Yes / No paths)
-  - If No: "Sign in with your GSC Google account" → Import from GSC walkthrough
-  - If Yes: "Generate API key at Settings → API Access" with screenshots
-  - Paste key → validate via test call → show verified sites → copy Claude Desktop config
-- Short launch post on sitefire blog positioning the tool in the GEO narrative
-- Add MCP tool annotations (readOnlyHint, idempotentHint, outputSchema) for typed, self-describing responses
-- Instrument `setup_check` optional anonymous success/fail ping to a sitefire endpoint (with explicit opt-in note, respects lead-magnet trust story)
+**In pulse-geo (the main product repo):**
+- [ ] Build `sitefire.ai/bing-seo` auth page (one field: paste Bing key, optional email)
+- [ ] Add OAuth metadata for bing-only entitlement tier
+- [ ] Port Bing tool functions from sitefire-bing-mcp into `routes/api/_shared/bing-tools.ts`
+- [ ] Port `bing-client.ts` and `bing-errors.ts` into pulse-geo shared modules
+- [ ] Add entitlement-based tool registration in `createMcpServer()`
+- [ ] Create Supabase migration for `bing_credentials` table
+- [ ] Add encrypted key storage and per-request decryption
+- [ ] Add contextual upgrade nudges in `weekly_report` and `setup_check` responses
+- [ ] Rate limiting for bing-only tier tokens
+- [ ] Test the full connector flow: add URL, auth page, tools work, upgrade path
+
+**In sitefire-bing-mcp (this repo):**
+- [ ] Optionally publish to npm as `@sitefire/bing-mcp` for developers who prefer local
+- [ ] Add MCP tool annotations (readOnlyHint, idempotentHint, outputSchema)
+- [ ] Add per-request timeout (AbortSignal with 15s) to bingFetch
+
+**Marketing:**
+- [ ] Short launch post on sitefire blog positioning the tool in the GEO narrative
+- [ ] Update README to mention the hosted connector option alongside the npx install
 
 ## Open questions / known risks
 

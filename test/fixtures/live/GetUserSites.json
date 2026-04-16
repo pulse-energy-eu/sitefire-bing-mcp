@@ -1,0 +1,32 @@
+{
+  "d": [
+    {
+      "__type": "Site",
+      "AuthenticationCode": "REDACTED",
+      "DnsVerificationCode": "REDACTED",
+      "IsVerified": true,
+      "Url": "https://app.gpt-pulse.com/"
+    },
+    {
+      "__type": "Site",
+      "AuthenticationCode": "REDACTED",
+      "DnsVerificationCode": "REDACTED",
+      "IsVerified": true,
+      "Url": "https://gpt-pulse.com/"
+    },
+    {
+      "__type": "Site",
+      "AuthenticationCode": "REDACTED",
+      "DnsVerificationCode": "REDACTED",
+      "IsVerified": true,
+      "Url": "https://pulse-energy.eu/"
+    },
+    {
+      "__type": "Site",
+      "AuthenticationCode": "REDACTED",
+      "DnsVerificationCode": "REDACTED",
+      "IsVerified": true,
+      "Url": "https://sitefire.ai/"
+    }
+  ]
+}

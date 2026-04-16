@@ -1,0 +1,15 @@
+{
+  "d": [
+    {
+      "__type": "Feed",
+      "Compressed": false,
+      "FileSize": 0,
+      "LastCrawled": "/Date(1744510557000)/",
+      "Status": "Success",
+      "Submitted": "/Date(1740696181730)/",
+      "Type": "Sitemap",
+      "Url": "https://sitefire.ai/sitemap.xml",
+      "UrlCount": 13
+    }
+  ]
+}

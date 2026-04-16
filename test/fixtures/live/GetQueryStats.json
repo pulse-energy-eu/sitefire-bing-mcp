@@ -1,0 +1,49 @@
+{
+  "d": [
+    {
+      "__type": "QueryStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 1,
+      "Clicks": 4,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 3,
+      "Query": "sitefire"
+    },
+    {
+      "__type": "QueryStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 3,
+      "Clicks": 1,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 5,
+      "Query": "how to improve geo visibility for my website"
+    },
+    {
+      "__type": "QueryStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 2,
+      "Clicks": 0,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 4,
+      "Query": "what is generative engine optimization"
+    },
+    {
+      "__type": "QueryStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 5,
+      "Clicks": 0,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 2,
+      "Query": "geo seo tools"
+    },
+    {
+      "__type": "QueryStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 4,
+      "Clicks": 0,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 1,
+      "Query": "bing webmaster api"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # sitefire-bing-mcp — v0 design doc
 
-**Status:** Plan reviewed, not yet built. Target repo: `pulse-energy-eu/sitefire-bing-mcp` (to be created).
+**Status:** v0 built and validated. Live-tested against 4 verified sites in Claude Desktop.
 **Last reviewed:** 2026-04-15 by `/plan-eng-review` with Codex outside voice (all 4 cross-model tensions resolved Codex-aligned).
 **Supersedes:** n/a (initial).
 
@@ -147,6 +147,19 @@ Every error the MCP surfaces to the user goes through `translateError()`. Mappin
 | `ErrorCode 16 (Deprecated)` | Explicitly deprecated endpoint | "This capability was removed by Microsoft." (should be unreachable from our tools — never exposed) |
 | Response body starts with `<` (WCF help page) | Parameter shape rejected at WCF layer | "Bing rejected the request shape. This is an API bug, not your fault. Please report it." |
 | 503 from Bing | Transient | Automatic retry once after 250ms. On second failure: "Bing is temporarily unavailable. Try again in a moment." |
+
+## API field name corrections (discovered during live testing)
+
+The Bing Webmaster API documentation and our initial design assumptions had several field names wrong. These were discovered and corrected during live API testing against 4 verified sites.
+
+| Endpoint | Assumed field name | Actual field name | Notes |
+|---|---|---|---|
+| `GetUrlInfo` | `DateDiscovered` | `DiscoveryDate` | |
+| `GetCrawlStats` | `StatusCode2xx`, `StatusCode4xx`, `StatusCode5xx` | `Code2xx`, `Code4xx`, `Code5xx` | Shorter than expected |
+| `GetPageStats` | `Page` | `Query` | Page URL lives in the `Query` field |
+| `GetFeeds` | `LastCrawledDate`, `SubmittedDate`, etc. | `LastCrawled`, `Submitted`, `Status`, `Type`, `UrlCount` | No `Date` suffix on temporal fields |
+| `GetKeywordStats` | `ExactImpressions` | `Impressions` | Query parameter must NOT be single-quoted (breaks the API). Returns 0 without country/language params. |
+| `GetUserSites` | `VerificationMeta` (assumed) | Does not exist | Returns `AuthenticationCode` and `DnsVerificationCode` instead (both need redacting in fixtures) |
 
 ## The seven tools
 
@@ -552,14 +565,14 @@ Each new codepath, one realistic production failure, whether v0 covers it:
 
 ## Time estimate
 
-**3-4 focused days for v0.** Honest breakdown:
+**Originally estimated 3-4 focused days. Actual: v0 was completed in a single focused session.** The original "1-2 days" estimate was rejected during review as optimistic, and the revised "3-4 days" turned out to be conservative. Parallel lane execution and live fixture capture happening alongside tool implementation compressed the timeline significantly.
+
+Original breakdown (kept for reference):
 
 - Day 1: Lanes A + B + D in parallel. Scaffold, bing-client, bing-errors, fixture script + initial capture + synthetics, README skeleton.
 - Day 2: Lane C part 1. Four smaller tools (list_my_sites, setup_check, inspect_url, keyword_opportunity). Each with tests.
 - Day 3: Lane C part 2. Three larger tools (weekly_report, push_to_bing, what_are_people_asking). Lane E server glue.
 - Day 4: Inspector walkthrough, polish, README completion, one friendly-customer dry-run.
-
-Original "1-2 days" estimate rejected during review as optimistic.
 
 ## Distribution and hosting
 
@@ -624,6 +637,7 @@ After v0 validates with 2-3 friendly customers:
   - If Yes: "Generate API key at Settings → API Access" with screenshots
   - Paste key → validate via test call → show verified sites → copy Claude Desktop config
 - Short launch post on sitefire blog positioning the tool in the GEO narrative
+- Add MCP tool annotations (readOnlyHint, idempotentHint, outputSchema) for typed, self-describing responses
 - Instrument `setup_check` optional anonymous success/fail ping to a sitefire endpoint (with explicit opt-in note, respects lead-magnet trust story)
 
 ## Open questions / known risks
@@ -636,6 +650,13 @@ After v0 validates with 2-3 friendly customers:
 | Installation trust (random GitHub project asks for API key) | Medium | Public repo, MIT license, clear README on what the key does and what data leaves their machine (none — straight HTTPS to Microsoft). Consider SLSA-style provenance in Phase 1+. |
 | Silent Bing API regression | Medium, low likelihood | Manual discipline in v0; TODO for cron smoke check in post-v0. |
 | Claude Desktop MCP format changes | Low, low likelihood | Structured-response approach is MCP-spec-idiomatic, unlikely to break. |
+| IndexNow key design | High (resolved) | Codex review caught that v0 was reusing the Bing API key as the IndexNow key. Fixed: IndexNow now uses a separate INDEXNOW_KEY env var. |
+| Double-translation loses typed errors | High (resolved) | Tool functions now let BingApiError propagate; errorResult() in index.ts translates once. |
+| No per-request timeout on bingFetch | Medium | Accepted for v0 local use. TODO: add AbortSignal with 15s timeout for Phase 1. |
+| Startup network call blocks transport | High (resolved) | Transport now connects first; startupCheck() runs in background. |
+| URL exact-match in setup_check | Medium (resolved) | URLs normalized via new URL().href before comparison. |
+| No outputSchema or tool annotations | Low | Phase 1 item. Add readOnlyHint, idempotentHint, and outputSchema for typed responses. |
+| Node.js prerequisite not documented | Medium (resolved) | Added to README prerequisites. |
 
 ## References
 

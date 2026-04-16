@@ -1,162 +1,254 @@
 #!/usr/bin/env node
-/**
- * sitefire-bing-mcp entry point.
- *
- * Responsibilities:
- *  - Read BING_WEBMASTER_API_KEY from env (soft-warn if missing; we continue
- *    so the user can still reach `setup_check` when it lands).
- *  - Perform a startup validation call (GetUserSites, 3s timeout) and emit
- *    one of three stderr banners: connected / invalid-key / unreachable.
- *    Critically, we do NOT hard-fail on invalid key. See DESIGN.md §
- *    Startup behavior for why.
- *  - Register the walking-skeleton tool set and connect to stdio.
- */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { bingFetch, BingApiError } from "./bing-client.js";
+import { translateError } from "./bing-errors.js";
+import { listMySites } from "./tools/list-my-sites.js";
+import { setupCheck } from "./tools/setup-check.js";
+import { weeklyReport } from "./tools/weekly-report.js";
+import { inspectUrl } from "./tools/inspect-url.js";
+import { keywordOpportunity } from "./tools/keyword-opportunity.js";
+import { pushToBing } from "./tools/push-to-bing.js";
+import { whatArePeopleAsking } from "./tools/what-are-people-asking.js";
 
-import {
-  createBingClient,
-  BingApiError,
-  type BingClient,
-} from "./bing-client.js";
-import {
-  listMySitesSafe,
-  SiteEntrySchema,
-} from "./tools/list-my-sites.js";
+const VERSION = "0.1.0";
 
-const SERVER_NAME = "sitefire-bing-mcp";
-const SERVER_VERSION = "0.1.0";
-const STARTUP_TIMEOUT_MS = 3_000;
-
-const SETUP_CHECK_GUIDANCE =
-  "Run `setup_check` to see your verified sites, or set BING_WEBMASTER_API_KEY in your Claude Desktop config and restart Claude.";
-
-function banner(message: string): void {
-  // stderr only; stdout is reserved for JSON-RPC over stdio.
-  process.stderr.write(`[${SERVER_NAME} v${SERVER_VERSION}] ${message}\n`);
+function log(msg: string): void {
+  process.stderr.write(`[sitefire-bing-mcp] ${msg}\n`);
 }
 
-async function validateStartup(client: BingClient | null): Promise<void> {
-  if (!client) {
-    banner(
+function getApiKey(): string {
+  return process.env.BING_WEBMASTER_API_KEY ?? "";
+}
+
+function requireApiKey(): string {
+  const key = getApiKey();
+  if (!key) {
+    throw new Error(
+      "BING_WEBMASTER_API_KEY is not set. Add it to your Claude Desktop config and restart.",
+    );
+  }
+  return key;
+}
+
+type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
+
+function errorResult(error: unknown): ToolResult {
+  const { message, suggested_tool } = translateError(error);
+  const text = suggested_tool
+    ? `${message} Try running ${suggested_tool}.`
+    : message;
+  return {
+    content: [{ type: "text" as const, text }],
+    isError: true,
+  };
+}
+
+async function startupCheck(): Promise<void> {
+  const key = getApiKey();
+
+  if (!key) {
+    log(
       "BING_WEBMASTER_API_KEY not set. The MCP will start but all tools will return setup guidance.",
     );
     return;
   }
 
   try {
-    const sites = await withTimeout(
-      client.call<unknown[]>("GetUserSites"),
-      STARTUP_TIMEOUT_MS,
+    const result = await Promise.race([
+      bingFetch({ apiKey: key, method: "GetUserSites" }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 3000),
+      ),
+    ]);
+    const sites = result as unknown[];
+
+    const verified = sites.filter(
+      (s) => (s as Record<string, unknown>).IsVerified,
     );
-    const count = Array.isArray(sites) ? sites.length : 0;
-    banner(`connected. ${count} verified site${count === 1 ? "" : "s"} found.`);
+    log(
+      `v${VERSION} - connected. ${verified.length} verified site(s) found.`,
+    );
   } catch (err) {
-    if (err instanceof BingApiError && err.kind === "InvalidApiKey") {
-      banner(
+    if (err instanceof BingApiError && err.code === "INVALID_API_KEY") {
+      log(
         "Your API key is invalid. Tools will route you to setup_check. Fix the key in your Claude Desktop config and restart.",
       );
-      return;
+    } else {
+      log(
+        "Could not reach Bing to validate the key. Tools will retry on first invocation.",
+      );
     }
-    banner(
-      `Could not reach Bing to validate the key (${(err as Error).message}). Tools will retry on first invocation.`,
-    );
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`timed out after ${ms}ms`));
-    }, ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
-}
+const server = new McpServer({
+  name: "sitefire-bing-mcp",
+  version: VERSION,
+});
 
-function buildClient(): BingClient | null {
-  const apiKey = process.env.BING_WEBMASTER_API_KEY;
-  if (!apiKey) return null;
-  return createBingClient({ apiKey });
-}
-
-function registerTools(server: McpServer, client: BingClient | null): void {
-  // ------- list_my_sites -------
-  const listMySitesOutputSchema = {
-    sites: z.array(SiteEntrySchema),
-    count: z.number().int().nonnegative(),
-    next_step: z.string().nullable(),
-  };
-
-  server.registerTool(
-    "list_my_sites",
-    {
-      description:
-        "List all sites under your Bing Webmaster account, with verification status. Start here to confirm which properties are available.",
-      inputSchema: {},
-      outputSchema: listMySitesOutputSchema,
-      annotations: {
-        title: "List my Bing-verified sites",
-        readOnlyHint: true,
-        idempotentHint: true,
-      },
-    },
-    async () => {
-      if (!client) {
-        return toolErrorResult(SETUP_CHECK_GUIDANCE);
-      }
-      const outcome = await listMySitesSafe(client);
-      if (!outcome.ok) {
-        return toolErrorResult(outcome.message);
-      }
+// Tool 1: list_my_sites
+server.tool(
+  "list_my_sites",
+  "Lists all sites in the user's Bing Webmaster account with verification status. Use when the user asks 'what sites do I have?' or 'which sites are verified?' Present results as a compact table (site URL, verified yes/no). Keep your response under 80 words.",
+  {},
+  async () => {
+    const key = getApiKey();
+    if (!key) {
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(outcome.data, null, 2) }],
-        structuredContent: outcome.data as unknown as Record<string, unknown>,
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              sites: [],
+              count: 0,
+              next_step:
+                "BING_WEBMASTER_API_KEY is not set. Add it to your Claude Desktop config and restart.",
+            }),
+          },
+        ],
       };
-    },
-  );
-}
+    }
+    const result = await listMySites(key);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  },
+);
 
-function toolErrorResult(message: string): {
-  content: Array<{ type: "text"; text: string }>;
-  isError: true;
-} {
-  return {
-    content: [{ type: "text", text: message }],
-    isError: true,
-  };
-}
+// Tool 2: setup_check
+server.tool(
+  "setup_check",
+  "Diagnoses configuration health: API key validity, site verification, sitemap submission, and data availability. Use when the user is setting up for the first time or something is broken. Show a checklist of pass/fail items and list any required next actions. Do not explain what each check means unless asked.",
+  { site_url: z.string().optional().describe("Optional: check a specific site URL") },
+  async ({ site_url }) => {
+    const key = getApiKey();
+    if (!key) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              key_valid: false,
+              sites_count: 0,
+              sites: [],
+              target_site: null,
+              checks: {
+                site_verified: "n/a",
+                sitemap_submitted: "n/a",
+                data_available: "n/a",
+                crawl_issues_clean: "n/a",
+              },
+              next_actions: [
+                "BING_WEBMASTER_API_KEY is not set. Add it to your Claude Desktop config and restart.",
+              ],
+            }),
+          },
+        ],
+      };
+    }
+    const result = await setupCheck(key, site_url);
+    return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+  },
+);
+
+// Tool 3: weekly_report
+server.tool(
+  "weekly_report",
+  "Weekly Bing performance snapshot: top queries, top pages, crawl health, crawl issues, and sitemap status. Use when the user asks 'how is my site doing?' or wants a performance overview. Lead with the key numbers (clicks, impressions, crawl errors) in a compact table, then list top queries and pages as short bullet lists. Keep it under 150 words unless the user asks for detail.",
+  { site_url: z.string().describe("Your verified site URL (e.g. https://example.com/)") },
+  async ({ site_url }) => {
+    try {
+      const key = requireApiKey();
+      const result = await weeklyReport(key, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
+  },
+);
+
+// Tool 4: inspect_url
+server.tool(
+  "inspect_url",
+  "Checks indexing status for a single URL: discovery date, last crawl, index status, and HTTP code. Use when the user asks 'is this page indexed?' or 'why is my page not showing up?' Show the status fields as a short key-value list. Only suggest next actions if the URL has a problem.",
+  {
+    url: z.string().describe("The URL to inspect"),
+    site_url: z.string().describe("The verified site this URL belongs to"),
+  },
+  async ({ url, site_url }) => {
+    try {
+      const key = requireApiKey();
+      const result = await inspectUrl(key, url, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
+  },
+);
+
+// Tool 5: keyword_opportunity
+server.tool(
+  "keyword_opportunity",
+  "Evaluates search demand for a keyword on Bing: 12-week impression trend and volume signal. Does not require owning a site. Use when the user asks 'is this keyword worth targeting?' or 'how much demand is there for X?' Show the verdict (worth it or not) first, then the trend as a compact sparkline or short table. Keep your response under 100 words.",
+  {
+    keyword: z.string().describe("The keyword to research"),
+    country: z.string().optional().describe("Country code (default: us)"),
+    language: z.string().optional().describe("Language code (default: en-US)"),
+  },
+  async ({ keyword, country, language }) => {
+    try {
+      const key = requireApiKey();
+      const result = await keywordOpportunity(key, keyword, country, language);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
+  },
+);
+
+// Tool 6: push_to_bing
+server.tool(
+  "push_to_bing",
+  "Submits a URL to Bing for crawling (and optionally via IndexNow for all search engines). Use when the user says 'I just published a page' or 'submit this URL to Bing.' Confirm success or failure in one sentence. Do not explain the submission process.",
+  {
+    url: z.string().describe("The URL you just published"),
+    site_url: z.string().describe("The verified site this URL belongs to"),
+  },
+  async ({ url, site_url }) => {
+    try {
+      const key = requireApiKey();
+      const result = await pushToBing(key, url, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
+  },
+);
+
+// Tool 7: what_are_people_asking
+server.tool(
+  "what_are_people_asking",
+  "Extracts question-style search queries that bring traffic to your site from Bing (e.g. 'how to...', 'what is...', 'why does...'). Use when the user wants content ideas or asks 'what are people searching for?' Present results as a numbered list of questions sorted by impressions. Keep your response under 150 words.",
+  { site_url: z.string().describe("Your verified site URL") },
+  async ({ site_url }) => {
+    try {
+      const key = requireApiKey();
+      const result = await whatArePeopleAsking(key, site_url);
+      return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
+    } catch (err) {
+      return errorResult(err);
+    }
+  },
+);
 
 async function main(): Promise<void> {
-  const client = buildClient();
-  await validateStartup(client);
-
-  const server = new McpServer({
-    name: SERVER_NAME,
-    version: SERVER_VERSION,
-  });
-
-  registerTools(server, client);
-
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  startupCheck();
 }
 
 main().catch((err) => {
-  // Surfaces catastrophic failures (transport or SDK-level). Tool failures
-  // are handled per-tool and do not reach here.
-  process.stderr.write(
-    `[${SERVER_NAME}] fatal: ${err instanceof Error ? err.message : String(err)}\n`,
-  );
+  log(`Fatal: ${err}`);
   process.exit(1);
 });

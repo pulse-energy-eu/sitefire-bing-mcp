@@ -1,37 +1,39 @@
 {
   "name": "sitefire-bing-mcp",
   "version": "0.1.0",
-  "description": "Local MCP server wrapping the Bing Webmaster API for Claude Desktop. Seven composite, outcome-named tools for non-technical SEO/GEO users.",
-  "license": "MIT",
+  "description": "Local MCP server for Bing Webmaster insights inside Claude Desktop",
   "type": "module",
   "bin": {
     "sitefire-bing-mcp": "dist/index.js"
   },
   "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+    "dist"
   ],
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc",
+    "prepare": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
+    "dev": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
-    "record-fixtures": "tsx scripts/record-fixtures.ts",
-    "inspector": "npx @modelcontextprotocol/inspector tsx src/index.ts"
+    "record-fixtures": "tsx scripts/record-fixtures.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4",
-    "zod": "^3.23.8"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
   },
   "devDependencies": {
-    "@types/node": "^22.9.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.5"
+    "@types/node": "^22.15.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pulse-energy-eu/sitefire-bing-mcp"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

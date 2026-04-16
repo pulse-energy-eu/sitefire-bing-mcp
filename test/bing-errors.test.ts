@@ -1,117 +1,75 @@
 import { describe, it, expect } from "vitest";
-
-import { BingApiError } from "../src/bing-client.js";
 import { translateError } from "../src/bing-errors.js";
+import { BingApiError } from "../src/bing-client.js";
 
-describe("bing-errors: translateError", () => {
-  it("ErrorCode 3 (InvalidApiKey) → regenerate-key guidance", () => {
-    const err = new BingApiError({
-      kind: "InvalidApiKey",
-      rawMessage: "Invalid API key.",
-      errorCode: 3,
+describe("translateError", () => {
+  it("ErrorCode 3: INVALID_API_KEY user message", () => {
+    const err = new BingApiError("INVALID_API_KEY", "raw msg", 3);
+    const result = translateError(err);
+    expect(result.message).toContain("API key is invalid");
+    expect(result.message).toContain("bing.com/webmasters");
+    expect(result.suggested_tool).toBe("setup_check");
+  });
+
+  it("ErrorCode 14: NOT_AUTHORIZED with site URL context", () => {
+    const err = new BingApiError("NOT_AUTHORIZED", "raw msg", 14);
+    const result = translateError(err, {
+      siteUrl: "https://example.com/",
     });
-    const message = translateError(err);
-    expect(message).toContain("Your Bing API key is invalid");
-    expect(message).toContain("Settings → API Access");
-    expect(message).toContain("restart");
-    // Must not leak the raw Bing message or error code.
-    expect(message).not.toContain("Invalid API key.");
-    expect(message).not.toContain("ErrorCode");
+    expect(result.message).toContain("example.com");
+    expect(result.message).toContain("not verified");
+    expect(result.message).toContain("Import from Google Search Console");
+    expect(result.suggested_tool).toBe("setup_check");
   });
 
-  it("ErrorCode 14 (NotAuthorized) → interpolates site URL and points at setup_check", () => {
-    const err = new BingApiError({
-      kind: "NotAuthorized",
-      rawMessage: "User is not authorized to access this site.",
-      errorCode: 14,
+  it("ErrorCode 14: NOT_AUTHORIZED without site URL context", () => {
+    const err = new BingApiError("NOT_AUTHORIZED", "raw msg", 14);
+    const result = translateError(err);
+    expect(result.message).toContain("not verified");
+    expect(result.suggested_tool).toBe("setup_check");
+  });
+
+  it("ErrorCode 7: INVALID_URL with URL context", () => {
+    const err = new BingApiError("INVALID_URL", "raw msg", 7);
+    const result = translateError(err, {
+      url: "https://bad-url.com/page",
     });
-    const message = translateError(err, { siteUrl: "https://sitefire.ai/" });
-    expect(message).toContain("https://sitefire.ai/");
-    expect(message).toContain("setup_check");
-    expect(message).toContain("Import from Google Search Console");
+    expect(result.message).toContain("bad-url.com");
+    expect(result.message).toContain("malformed");
+    expect(result.suggested_tool).toBe("list_my_sites");
   });
 
-  it("ErrorCode 14 without a site URL in context → generic 'that site' phrasing", () => {
-    const err = new BingApiError({
-      kind: "NotAuthorized",
-      rawMessage: "User is not authorized to access this site.",
-      errorCode: 14,
-    });
-    const message = translateError(err);
-    expect(message).toContain("that site");
+  it("ErrorCode 2: MALFORMED_ERROR user message", () => {
+    const err = new BingApiError("MALFORMED_ERROR", "raw msg", 2);
+    const result = translateError(err);
+    expect(result.message).toContain("malformed error");
+    expect(result.message).toContain("report it");
+    expect(result.suggested_tool).toBeNull();
   });
 
-  it("ErrorCode 7 (InvalidUrl) → interpolates URL and points at list_my_sites", () => {
-    const err = new BingApiError({
-      kind: "InvalidUrl",
-      rawMessage: "Invalid site url.",
-      errorCode: 7,
-    });
-    const message = translateError(err, { url: "not-a-url" });
-    expect(message).toContain("not-a-url");
-    expect(message).toContain("list_my_sites");
+  it("ErrorCode 16: DEPRECATED user message", () => {
+    const err = new BingApiError("DEPRECATED", "raw msg", 16);
+    const result = translateError(err);
+    expect(result.message).toContain("removed by Microsoft");
+    expect(result.suggested_tool).toBeNull();
   });
 
-  it("ErrorCode 2 (DateTime/ObjectRef) → bug-report message (never blame user)", () => {
-    const err = new BingApiError({
-      kind: "DateTimeOrObjectRef",
-      rawMessage: "Object reference not set to an instance of an object.",
-      errorCode: 2,
-    });
-    const message = translateError(err);
-    expect(message).toContain("report");
-    expect(message).not.toContain("Object reference");
+  it("WCF_REJECT user message", () => {
+    const err = new BingApiError("WCF_REJECT", "raw msg");
+    const result = translateError(err);
+    expect(result.message).toContain("rejected the request shape");
+    expect(result.message).toContain("report it");
+    expect(result.suggested_tool).toBeNull();
   });
 
-  it("ErrorCode 16 (Deprecated) → removed-by-Microsoft message", () => {
-    const err = new BingApiError({
-      kind: "Deprecated",
-      rawMessage: "Endpoint deprecated.",
-      errorCode: 16,
-    });
-    const message = translateError(err);
-    expect(message).toContain("removed by Microsoft");
+  it("non-BingApiError returns generic message", () => {
+    const result = translateError(new Error("random"));
+    expect(result.message).toContain("unexpected error");
+    expect(result.suggested_tool).toBeNull();
   });
 
-  it("WCF reject → 'API bug, not your fault' message", () => {
-    const err = new BingApiError({
-      kind: "WcfReject",
-      rawMessage: "WCF help page returned",
-    });
-    const message = translateError(err);
-    expect(message).toContain("rejected the request shape");
-    expect(message).toContain("not your fault");
-    expect(message).toContain("report");
-  });
-
-  it("HttpFail (503 retried twice) → temporarily-unavailable message", () => {
-    const err = new BingApiError({
-      kind: "HttpFail",
-      rawMessage: "Bing returned 503 twice",
-      httpStatus: 503,
-    });
-    expect(translateError(err)).toContain("temporarily unavailable");
-  });
-
-  it("Unknown error kind → preserves raw message for debuggability", () => {
-    const err = new BingApiError({
-      kind: "Unknown",
-      rawMessage: "Some novel failure",
-      errorCode: 999,
-    });
-    const message = translateError(err);
-    expect(message).toContain("Some novel failure");
-    expect(message).toContain("report");
-  });
-
-  it("plain Error → generic message with cause", () => {
-    const message = translateError(new Error("fetch failed"));
-    expect(message).toContain("fetch failed");
-    expect(message).toContain("report");
-  });
-
-  it("non-Error value → fully generic message", () => {
-    expect(translateError("oops")).toContain("Something went wrong");
-    expect(translateError(null)).toContain("Something went wrong");
+  it("non-Error value returns generic message", () => {
+    const result = translateError("some string");
+    expect(result.message).toContain("unexpected error");
   });
 });

@@ -1,4 +1,4 @@
 {
-  "ErrorCode": 9,
-  "Message": "You have exceeded your daily submission quota for URL submission."
+  "ErrorCode": 18,
+  "Message": "QuotaExhausted: Daily URL submission quota has been exhausted. Try again tomorrow."
 }

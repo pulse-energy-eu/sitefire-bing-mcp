@@ -1,9 +1,9 @@
 {
   "d": {
-    "__type": "UrlInfo:#Microsoft.Bing.Webmaster.Api",
-    "Url": "https://example.com/never-crawled",
+    "__type": "UrlInfo",
+    "Url": "https://sitefire.ai/blog/nonexistent-post",
     "IsPage": false,
-    "DiscoveryDate": null,
+    "DateDiscovered": null,
     "LastCrawledDate": null,
     "AnchorCount": 0,
     "DocumentSize": 0,

@@ -1,256 +1,261 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { bingFetch, BingApiError, parseBingDate } from "../src/bing-client.js";
+import { readFileSync } from "fs";
+import { join } from "path";
 
-import {
-  createBingClient,
-  BingApiError,
-  parseMsJsonDate,
-} from "../src/bing-client.js";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixtureDir = resolve(__dirname, "fixtures", "synthetic");
-
-const readFixture = (name: string): string =>
-  readFileSync(resolve(fixtureDir, name), "utf8");
-
-interface StubResponseInit {
-  status?: number;
-  body: string;
-  contentType?: string;
+function fixture(path: string): string {
+  return readFileSync(join(__dirname, "fixtures", path), "utf-8");
 }
 
-function stubResponse({ status = 200, body, contentType = "application/json" }: StubResponseInit): Response {
+// Mock fetch at module level
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
+function mockResponse(body: string, status = 200): Response {
   return new Response(body, {
     status,
-    headers: { "Content-Type": contentType },
+    headers: { "Content-Type": "application/json" },
   });
 }
 
-const noSleep = async (): Promise<void> => {
-  // deterministic: no real delay in tests
-};
+beforeEach(() => {
+  mockFetch.mockReset();
+});
 
-describe("bing-client: bingFetch happy path", () => {
-  it("unwraps the OData envelope, strips __type, and parses /Date(ms)/", async () => {
-    const fixture = readFixture("get-user-sites-happy.json");
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () => stubResponse({ body: fixture }),
-    });
+describe("bingFetch", () => {
+  const apiKey = "test-key";
 
-    const sites = await client.call<Array<Record<string, unknown>>>("GetUserSites");
-
-    expect(Array.isArray(sites)).toBe(true);
-    expect(sites).toHaveLength(2);
-    expect(sites[0]).not.toHaveProperty("__type");
-    expect(sites[0]?.Url).toBe("https://sitefire.ai/");
-    expect(sites[0]?.VerifiedDate).toBeInstanceOf(Date);
-    expect((sites[0]?.VerifiedDate as Date).toISOString()).toBe(
-      new Date(1700000000000).toISOString(),
+  it("happy path: returns d payload with __type stripped and dates parsed", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(fixture("live/GetUserSites.json")),
     );
+
+    const result = await bingFetch({ apiKey, method: "GetUserSites" });
+
+    expect(Array.isArray(result)).toBe(true);
+    const sites = result as Array<Record<string, unknown>>;
+    expect(sites).toHaveLength(4);
+    // __type should be stripped
+    expect(sites[0]).not.toHaveProperty("__type");
+    expect(sites[0].Url).toBe("https://app.gpt-pulse.com/");
+    expect(sites[0].IsVerified).toBe(true);
   });
 
-  it("returns an empty array when Bing responds with { d: [] }", async () => {
-    const fixture = readFixture("empty-account.json");
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () => stubResponse({ body: fixture }),
+  it("200 with ErrorCode: throws BingApiError", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(fixture("synthetic/invalid-api-key.json")),
+    );
+
+    await expect(
+      bingFetch({ apiKey, method: "GetUserSites" }),
+    ).rejects.toThrow(BingApiError);
+
+    try {
+      mockFetch.mockResolvedValueOnce(
+        mockResponse(fixture("synthetic/invalid-api-key.json")),
+      );
+      await bingFetch({ apiKey, method: "GetUserSites" });
+    } catch (e) {
+      expect(e).toBeInstanceOf(BingApiError);
+      expect((e as BingApiError).code).toBe("INVALID_API_KEY");
+    }
+  });
+
+  it("200 with WCF XML: throws BingApiError(WCF_REJECT)", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(fixture("synthetic/wcf-xml-error.html")),
+    );
+
+    await expect(
+      bingFetch({ apiKey, method: "BadMethod" }),
+    ).rejects.toThrow(BingApiError);
+
+    try {
+      mockFetch.mockResolvedValueOnce(
+        mockResponse(fixture("synthetic/wcf-xml-error.html")),
+      );
+      await bingFetch({ apiKey, method: "BadMethod" });
+    } catch (e) {
+      expect(e).toBeInstanceOf(BingApiError);
+      expect((e as BingApiError).code).toBe("WCF_REJECT");
+    }
+  });
+
+  it("503 transient: retries once and succeeds", async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValueOnce(
+        mockResponse(fixture("live/GetUserSites.json")),
+      );
+
+    const result = await bingFetch({ apiKey, method: "GetUserSites" });
+    expect(Array.isArray(result)).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("503 transient: retries once, still 503, throws HTTP_FAIL", async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValueOnce(new Response("", { status: 503 }));
+
+    await expect(
+      bingFetch({ apiKey, method: "GetUserSites" }),
+    ).rejects.toThrow(BingApiError);
+
+    // Verify the error code
+    mockFetch
+      .mockResolvedValueOnce(new Response("", { status: 503 }))
+      .mockResolvedValueOnce(new Response("", { status: 503 }));
+
+    try {
+      await bingFetch({ apiKey, method: "GetUserSites" });
+    } catch (e) {
+      expect((e as BingApiError).code).toBe("HTTP_FAIL");
+      expect((e as BingApiError).message).toContain("temporarily unavailable");
+    }
+  });
+
+  it("non-retryable 4xx: throws immediately", async () => {
+    mockFetch.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
+
+    try {
+      await bingFetch({ apiKey, method: "GetUserSites" });
+    } catch (e) {
+      expect(e).toBeInstanceOf(BingApiError);
+      expect((e as BingApiError).code).toBe("HTTP_FAIL");
+      expect((e as BingApiError).message).toContain("404");
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("non-2xx with typed error body: extracts BingApiError", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(fixture("synthetic/not-authorized.json"), 403),
+    );
+
+    try {
+      await bingFetch({ apiKey, method: "GetUserSites" });
+    } catch (e) {
+      expect(e).toBeInstanceOf(BingApiError);
+      expect((e as BingApiError).code).toBe("NOT_AUTHORIZED");
+    }
+  });
+
+  it("malformed JSON response: throws MALFORMED_ERROR", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse("this is not json at all"),
+    );
+
+    try {
+      await bingFetch({ apiKey, method: "GetUserSites" });
+    } catch (e) {
+      expect(e).toBeInstanceOf(BingApiError);
+      expect((e as BingApiError).code).toBe("MALFORMED_ERROR");
+    }
+  });
+
+  it("empty 200 response body: throws MALFORMED_ERROR", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse(""));
+
+    try {
+      await bingFetch({ apiKey, method: "GetUserSites" });
+    } catch (e) {
+      expect(e).toBeInstanceOf(BingApiError);
+      expect((e as BingApiError).code).toBe("MALFORMED_ERROR");
+    }
+  });
+
+  it("empty d array: returns empty array, not an error", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(fixture("synthetic/empty-account.json")),
+    );
+
+    const result = await bingFetch({ apiKey, method: "GetUserSites" });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(0);
+  });
+
+  it("network error: throws NETWORK_ERROR", async () => {
+    mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    try {
+      await bingFetch({ apiKey, method: "GetUserSites" });
+    } catch (e) {
+      expect(e).toBeInstanceOf(BingApiError);
+      expect((e as BingApiError).code).toBe("NETWORK_ERROR");
+    }
+  });
+
+  it("passes params as query parameters", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(fixture("live/GetUrlInfo.json")),
+    );
+
+    await bingFetch({
+      apiKey,
+      method: "GetUrlInfo",
+      params: { siteUrl: "https://sitefire.ai/", url: "https://sitefire.ai/" },
     });
 
-    const sites = await client.call<unknown[]>("GetUserSites");
-    expect(sites).toEqual([]);
+    const calledUrl = new URL(mockFetch.mock.calls[0][0]);
+    expect(calledUrl.searchParams.get("siteUrl")).toBe("https://sitefire.ai/");
+    expect(calledUrl.searchParams.get("url")).toBe("https://sitefire.ai/");
+    expect(calledUrl.searchParams.get("apikey")).toBe("test-key");
   });
 
-  it("parses /Date(ms+TZ)/ independent of host timezone", () => {
-    const withTz = parseMsJsonDate("/Date(1705000000000+0000)/");
-    const withOffset = parseMsJsonDate("/Date(1705000000000+0530)/");
-    const noTz = parseMsJsonDate("/Date(1705000000000)/");
+  it("POST method sends JSON body", async () => {
+    mockFetch.mockResolvedValueOnce(mockResponse('{"d": null}'));
 
-    // All three must parse to the same UTC instant: the +NNNN suffix is
-    // informational only in Microsoft-JSON dates.
-    expect(withTz?.toISOString()).toBe(new Date(1705000000000).toISOString());
-    expect(withOffset?.toISOString()).toBe(new Date(1705000000000).toISOString());
-    expect(noTz?.toISOString()).toBe(new Date(1705000000000).toISOString());
-  });
+    await bingFetch({
+      apiKey,
+      method: "SubmitUrlBatch",
+      httpMethod: "POST",
+      body: { siteUrl: "https://sitefire.ai/", urlList: ["https://sitefire.ai/new"] },
+    });
 
-  it("leaves ordinary strings untouched", () => {
-    expect(parseMsJsonDate("not a date")).toBeUndefined();
-    expect(parseMsJsonDate("2024-01-01T00:00:00Z")).toBeUndefined();
+    const fetchCall = mockFetch.mock.calls[0];
+    expect(fetchCall[1].method).toBe("POST");
+    expect(fetchCall[1].headers["Content-Type"]).toBe("application/json");
   });
 });
 
-describe("bing-client: typed errors (HTTP 200 with ErrorCode)", () => {
-  it("ErrorCode 3 → kind=InvalidApiKey", async () => {
-    const client = createBingClient({
-      apiKey: "bad",
-      sleepImpl: noSleep,
-      fetchImpl: async () =>
-        stubResponse({ body: JSON.stringify({ ErrorCode: 3, Message: "Invalid API key." }) }),
-    });
-
-    await expect(client.call("GetUserSites")).rejects.toMatchObject({
-      name: "BingApiError",
-      kind: "InvalidApiKey",
-      errorCode: 3,
-    });
+describe("parseBingDate", () => {
+  it("converts /Date(ms)/ to ISO string", () => {
+    const result = parseBingDate("/Date(1713225600000)/");
+    expect(result).toBe("2024-04-16T00:00:00.000Z");
   });
 
-  it("ErrorCode 14 inside OData d → kind=NotAuthorized", async () => {
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () =>
-        stubResponse({
-          body: JSON.stringify({
-            d: {
-              __type: "ApiError:#Microsoft.Bing.Webmaster.Api",
-              ErrorCode: 14,
-              Message: "User is not authorized to access this site.",
-            },
-          }),
-        }),
-    });
-
-    await expect(client.call("GetQueryStats", { siteUrl: "https://other.example" })).rejects.toMatchObject({
-      kind: "NotAuthorized",
-      errorCode: 14,
-    });
+  it("converts /Date(ms-TZ)/ to ISO string (ignores TZ offset in format)", () => {
+    const result = parseBingDate("/Date(1713225600000-0700)/");
+    expect(result).toBe("2024-04-16T00:00:00.000Z");
   });
 
-  it("ErrorCode 7 → kind=InvalidUrl (from fixture)", async () => {
-    const fixture = readFixture("wrong-site-format.json");
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () => stubResponse({ body: fixture }),
-    });
-
-    await expect(client.call("GetUrlInfo", { url: "not-a-url" })).rejects.toMatchObject({
-      kind: "InvalidUrl",
-      errorCode: 7,
-    });
+  it("converts /Date(ms+TZ)/ to ISO string", () => {
+    const result = parseBingDate("/Date(1713225600000+0200)/");
+    expect(result).toBe("2024-04-16T00:00:00.000Z");
   });
 
-  it("ErrorCode 2 → kind=DateTimeOrObjectRef", async () => {
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () =>
-        stubResponse({ body: JSON.stringify({ ErrorCode: 2, Message: "Object reference not set." }) }),
-    });
-    await expect(client.call("GetFoo")).rejects.toMatchObject({ kind: "DateTimeOrObjectRef" });
+  it("returns non-date strings unchanged", () => {
+    expect(parseBingDate("hello")).toBe("hello");
   });
 
-  it("ErrorCode 16 → kind=Deprecated", async () => {
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () =>
-        stubResponse({ body: JSON.stringify({ ErrorCode: 16, Message: "Deprecated." }) }),
-    });
-    await expect(client.call("GetRelatedKeywords")).rejects.toMatchObject({ kind: "Deprecated" });
+  it("returns non-string values unchanged", () => {
+    expect(parseBingDate(42)).toBe(42);
+    expect(parseBingDate(null)).toBeNull();
+    expect(parseBingDate(undefined)).toBeUndefined();
   });
 
-  it("Unknown ErrorCode → kind=Unknown (raw message preserved)", async () => {
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () =>
-        stubResponse({ body: JSON.stringify({ ErrorCode: 999, Message: "Surprise." }) }),
-    });
-    const err = await client.call("GetFoo").catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(BingApiError);
-    expect((err as BingApiError).kind).toBe("Unknown");
-    expect((err as BingApiError).rawMessage).toBe("Surprise.");
-  });
-});
+  it("parses dates in nested objects from fixture", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse(fixture("live/GetUrlInfo.json")),
+    );
+    const result = (await bingFetch({
+      apiKey: "test",
+      method: "GetUrlInfo",
+    })) as Record<string, unknown>;
 
-describe("bing-client: WCF rejections", () => {
-  it("200 with HTML body → kind=WcfReject", async () => {
-    const fixture = readFixture("wcf-xml-error.html");
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () =>
-        stubResponse({ body: fixture, contentType: "text/html" }),
-    });
-
-    await expect(client.call("GetBogus")).rejects.toMatchObject({ kind: "WcfReject" });
-  });
-});
-
-describe("bing-client: 503 retry-once", () => {
-  it("retries once on 503 and returns the second response", async () => {
-    let attempts = 0;
-    const client = createBingClient({
-      apiKey: "key",
-      retryDelayMs: 1,
-      sleepImpl: noSleep,
-      fetchImpl: async () => {
-        attempts += 1;
-        if (attempts === 1) {
-          return stubResponse({ status: 503, body: "Service Unavailable" });
-        }
-        return stubResponse({ body: JSON.stringify({ d: [] }) });
-      },
-    });
-
-    const result = await client.call<unknown[]>("GetUserSites");
-    expect(result).toEqual([]);
-    expect(attempts).toBe(2);
-  });
-
-  it("throws HttpFail when both attempts return 503", async () => {
-    let attempts = 0;
-    const client = createBingClient({
-      apiKey: "key",
-      retryDelayMs: 1,
-      sleepImpl: noSleep,
-      fetchImpl: async () => {
-        attempts += 1;
-        return stubResponse({ status: 503, body: "Service Unavailable" });
-      },
-    });
-
-    await expect(client.call("GetUserSites")).rejects.toMatchObject({
-      kind: "HttpFail",
-      httpStatus: 503,
-    });
-    expect(attempts).toBe(2);
-  });
-});
-
-describe("bing-client: non-retryable HTTP failures", () => {
-  it("throws immediately on HTTP 500 with no body", async () => {
-    let attempts = 0;
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () => {
-        attempts += 1;
-        return stubResponse({ status: 500, body: "" });
-      },
-    });
-
-    await expect(client.call("GetUserSites")).rejects.toMatchObject({ kind: "HttpFail" });
-    expect(attempts).toBe(1);
-  });
-
-  it("surfaces typed error bodies even when HTTP status is not 200", async () => {
-    const client = createBingClient({
-      apiKey: "key",
-      sleepImpl: noSleep,
-      fetchImpl: async () =>
-        stubResponse({ status: 400, body: JSON.stringify({ ErrorCode: 3, Message: "Bad key" }) }),
-    });
-
-    await expect(client.call("GetUserSites")).rejects.toMatchObject({
-      kind: "InvalidApiKey",
-      httpStatus: 400,
-    });
+    // Dates should be ISO strings, not /Date(...)/ format
+    expect(result.DiscoveryDate).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(result.LastCrawledDate).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });

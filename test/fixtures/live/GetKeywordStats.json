@@ -1,0 +1,32 @@
+{
+  "d": [
+    {
+      "__type": "KeywordStats",
+      "BroadImpressions": 110,
+      "Date": "/Date(1729224000000)/",
+      "Impressions": 33,
+      "Query": "seo tools"
+    },
+    {
+      "__type": "KeywordStats",
+      "BroadImpressions": 130,
+      "Date": "/Date(1729828800000)/",
+      "Impressions": 61,
+      "Query": "seo tools"
+    },
+    {
+      "__type": "KeywordStats",
+      "BroadImpressions": 150,
+      "Date": "/Date(1730433600000)/",
+      "Impressions": 45,
+      "Query": "seo tools"
+    },
+    {
+      "__type": "KeywordStats",
+      "BroadImpressions": 170,
+      "Date": "/Date(1731038400000)/",
+      "Impressions": 52,
+      "Query": "seo tools"
+    }
+  ]
+}

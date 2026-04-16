@@ -1,0 +1,31 @@
+{
+  "d": [
+    {
+      "__type": "PageStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 3,
+      "Clicks": 4,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 4,
+      "Query": "https://sitefire.ai/"
+    },
+    {
+      "__type": "PageStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 5,
+      "Clicks": 1,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 8,
+      "Query": "https://sitefire.ai/blog/geo-visibility"
+    },
+    {
+      "__type": "PageStats",
+      "AvgClickPosition": -1,
+      "AvgImpressionPosition": 4,
+      "Clicks": 0,
+      "Date": "/Date(1741219200000)/",
+      "Impressions": 3,
+      "Query": "https://sitefire.ai/pricing"
+    }
+  ]
+}

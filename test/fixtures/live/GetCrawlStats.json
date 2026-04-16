@@ -1,0 +1,22 @@
+{
+  "d": [
+    {
+      "__type": "CrawlStats",
+      "AllOtherCodes": 2,
+      "BlockedByRobotsTxt": 0,
+      "Code2xx": 7,
+      "Code301": 0,
+      "Code302": 0,
+      "Code4xx": 0,
+      "Code5xx": 0,
+      "ConnectionTimeout": 0,
+      "ContainsMalware": 0,
+      "CrawlErrors": 0,
+      "CrawledPages": 2,
+      "Date": "/Date(1740873600000)/",
+      "DnsFailures": 0,
+      "InIndex": 5,
+      "InLinks": 9
+    }
+  ]
+}

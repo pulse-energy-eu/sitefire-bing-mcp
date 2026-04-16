@@ -1,14 +1,6 @@
 # sitefire-bing-mcp
 
-> Local Model Context Protocol server for Bing Webmaster insights, inside Claude Desktop. One API key, zero hosting. Designed for non-technical SEO/GEO professionals.
-
-**Status:** v0 in progress. Client layer (`bing-client`, `bing-errors`) + fixtures + tests landed. Tool implementations next. Design doc: [DESIGN.md](DESIGN.md).
-
-## What this is
-
-A Claude Desktop MCP that wraps the Bing Webmaster API behind seven composite, outcome-named tools. Drop your Bing API key into one config file, restart Claude Desktop, ask Claude questions about your site's Bing and generative-engine visibility.
-
-**Why Bing:** ChatGPT Search, Microsoft Copilot, and a significant slice of Perplexity all retrieve from the Bing index. Whatever Bing knows about your site is, in practice, what generative engines can cite.
+Get Bing search and AI visibility insights for your website, directly inside Claude Desktop.
 
 ## The seven tools
 
@@ -26,16 +18,31 @@ See [DESIGN.md § The seven tools](DESIGN.md#the-seven-tools) for the full contr
 
 ## What you need
 
-- Claude Desktop
-- A free Bing Webmaster Tools account (sign in with your existing Google, Microsoft, or Facebook account at [bing.com/webmasters](https://www.bing.com/webmasters))
-- Your site verified under that Bing account (one-click if you already use Google Search Console — use **Import from Google Search Console**)
-- An API key generated at Bing Webmaster Tools → **Settings → API Access**
+- **Node.js 18 or newer** installed on your computer ([download here](https://nodejs.org))
+- **Claude Desktop** installed on your computer ([download here](https://claude.ai/download))
+- **A Bing Webmaster Tools account** (free - you can sign in with your existing Google, Microsoft, or Facebook account)
+- **Your Bing API key** (generated inside Bing Webmaster Tools - see steps below)
+
+## Get your Bing API key
+
+1. Go to [bing.com/webmasters](https://www.bing.com/webmasters) and click **Get Started**.
+2. Sign in with your **Google**, **Microsoft**, or **Facebook** account. If you have Google Search Console, use your Google account.
+3. If your site is not yet in Bing, click **Import** on the My Sites page to pull your sites from Google Search Console. Select the sites you want and click **Import**.
+4. Once your site appears in the dashboard, click **Settings** in the left sidebar.
+5. Click **API Access**.
+6. Click **Generate** to create your API key.
+7. Copy the key. You will paste it in the next step.
+
+Data from Bing may take up to 48 hours to appear after you first import your site.
 
 ## Install
 
-_Not yet published. This section describes the target install experience._
+Open your Claude Desktop configuration file:
 
-Once v0 is released, add the following to your Claude Desktop config (Settings → Developer → Edit Config):
+- **Mac:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+Add the following to the file (replace `paste-your-key-here` with the API key you copied above):
 
 ```json
 {
@@ -44,94 +51,51 @@ Once v0 is released, add the following to your Claude Desktop config (Settings �
       "command": "npx",
       "args": ["-y", "github:pulse-energy-eu/sitefire-bing-mcp"],
       "env": {
-        "BING_WEBMASTER_API_KEY": "YOUR_KEY_HERE"
+        "BING_WEBMASTER_API_KEY": "paste-your-key-here"
       }
     }
   }
 }
 ```
 
-Then quit and reopen Claude Desktop. The MCP will appear in the tool list; ask Claude "run `setup_check`" to confirm it is wired up.
+If the file already has other MCP servers configured, add the `"sitefire-bing": { ... }` block inside the existing `"mcpServers"` object.
 
-## Development
+Save the file and **restart Claude Desktop**.
 
-```bash
-npm install
-npm test                # vitest run, unit tests only (<2s)
-npm run dev             # run the MCP directly with tsx (stdio)
-npm run build           # emit dist/
-npm run inspector       # walk the tools with @modelcontextprotocol/inspector
-```
+## What you can ask Claude
 
-### Recording live fixtures
+Once installed, open Claude Desktop and try any of these:
 
-Unit tests run against hand-crafted synthetic fixtures plus captures taken from
-a real Bing account. To refresh the live captures:
+| You ask | What happens |
+|---|---|
+| "Which sites are connected to my Bing account?" | Lists all your verified sites and their verification status. |
+| "Is everything set up correctly for mysite.com?" | Runs a health check on your API key, site verification, sitemap, and data availability. Tells you exactly what to fix if something is off. |
+| "How is my site doing on Bing this week?" | Gives you a weekly report with clicks, impressions, top queries, top pages, crawl health, and any issues. |
+| "What does Bing know about this URL?" | Inspects a specific page to show when Bing last crawled it, whether it is fresh or stale, and what to do next. |
+| "Is 'generative engine optimization' worth writing about?" | Checks Bing search demand for any keyword, including a 12-week trend. Works even before your site has any data. |
+| "I just published a new blog post - tell Bing." | Submits a URL directly to Bing for crawling so it gets picked up faster. |
+| "What questions bring people to my site from Bing?" | Filters your search queries to surface the natural-language questions real people are asking. |
 
-```bash
-BING_WEBMASTER_API_KEY=... \
-BING_SITE_URL=https://sitefire.ai/ \
-  npm run record-fixtures
-```
+## Why Bing matters
 
-The script sanitizes per [test/fixtures/REDACTION.md](test/fixtures/REDACTION.md)
-before writing. Review the diff before committing — if you see an unredacted
-email, DNS code, or customer query, delete the file, fix the redactor in
-`scripts/record-fixtures.ts`, and re-run.
+ChatGPT Search, Microsoft Copilot, and a significant share of Perplexity all pull results from the Bing index. Whatever Bing knows about your site is what these AI tools can cite when answering questions. If you are only tracking Google, you are missing a large piece of your AI visibility.
 
-### Project layout
+## Troubleshooting
 
-```
-src/
-  bing-client.ts       # HTTP layer, OData unwrap, date parse, 503 retry, typed errors
-  bing-errors.ts       # translateError: BingApiError → user-facing sentence
-  tools/               # one file per MCP tool (coming in Lane C)
-  index.ts             # MCP server, tool registry, startup validation (Lane E)
-scripts/
-  record-fixtures.ts   # live Bing API → sanitized golden fixtures
-test/
-  bing-client.test.ts
-  bing-errors.test.ts
-  fixtures/
-    live/              # captured; populated by record-fixtures.ts
-    synthetic/         # hand-crafted edge cases
-    REDACTION.md
-DESIGN.md              # v0 spec; source of truth
-docs/
-  bing-api-reference.md
-```
+**"Your Bing API key is invalid"**
+Your key may have expired or been copied incorrectly. Go back to [bing.com/webmasters](https://www.bing.com/webmasters), then Settings, then API Access, and generate a new key. Paste it into your Claude Desktop config file and restart Claude Desktop.
 
-### Pre-release checklist (manual)
+**"No data yet" or empty reports**
+If you just imported your site, Bing needs up to 48 hours to populate data. In the meantime, try asking about keyword demand for a topic you care about - that works immediately, even without site data.
 
-Before each friendly-customer release, run the inspector and walk these:
+**"Site not verified" errors**
+The site you are asking about is not connected to your Bing account. Go to [bing.com/webmasters](https://www.bing.com/webmasters), click Import, and pull it in from Google Search Console. Then wait a few minutes and try again.
 
-- [ ] `list_my_sites` returns the expected sites
-- [ ] `setup_check` with a valid key → all checks green
-- [ ] `setup_check` with a deliberately-wrong site URL → guided recovery
-- [ ] `keyword_opportunity("generative engine optimization")` → 12-week trend
-- [ ] `weekly_report` against a site with data → non-empty report
-- [ ] `weekly_report` against a fresh property → `empty_state_guidance` set
-- [ ] `inspect_url` against a known page → `state=fresh`
-- [ ] `inspect_url` against an unknown URL → `state=never_crawled`
-- [ ] `push_to_bing` with no IndexNow key file → falls back to Bing-only cleanly
-- [ ] `what_are_people_asking` → filtered queries + honest note
-- [ ] Invalid API key → stderr banner visible in Claude Desktop MCP log
+**Claude Desktop does not show the Bing tools**
+Make sure your config file is valid JSON (watch for missing commas or extra brackets). Save the file and restart Claude Desktop completely.
 
-## Trust and data handling
-
-- Your API key lives in your Claude Desktop config on your own machine. Nothing is ever sent to sitefire.
-- Requests go directly from the MCP process on your laptop to Microsoft over HTTPS.
-- No database, no telemetry, no analytics in v0.
-- Source is MIT-licensed and public; read `src/` before you paste a key if you want to verify.
-
-## Next step
-
-See **[DESIGN.md](DESIGN.md)** for the full v0 architecture, tool specs, test strategy, failure-mode analysis, and timeline.
-
-API reference lives next door: [docs/bing-api-reference.md](docs/bing-api-reference.md).
-
-## Licence
+## License
 
 MIT. See [LICENSE](LICENSE).
 
-Built by [sitefire](https://sitefire.ai) (YC W26). Released as a free lead-magnet tool for the GEO community.
+Built by [sitefire](https://sitefire.ai) (YC W26).

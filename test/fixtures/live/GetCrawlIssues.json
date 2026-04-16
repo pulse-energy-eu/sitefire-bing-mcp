@@ -1,0 +1,11 @@
+{
+  "d": [
+    {
+      "__type": "CrawlIssue",
+      "Severity": 2,
+      "IssueCode": 1001,
+      "Message": "Some pages returned HTTP 404",
+      "Count": 2
+    }
+  ]
+}
